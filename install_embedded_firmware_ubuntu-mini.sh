@@ -73,7 +73,7 @@ clone_or_pull() {
 ###############################################################################
 
 prepare_system() {
-    log_info "=== ÉTAPE 1/10 : Préparation du système ==="
+    log_info "=== ÉTAPE 1/9 : Préparation du système ==="
 
     apt-get update
     apt-get upgrade -y
@@ -107,7 +107,7 @@ prepare_system() {
 ###############################################################################
 
 install_arduino_avr() {
-    log_info "=== ÉTAPE 2/10 : Toolchains Arduino / AVR ==="
+    log_info "=== ÉTAPE 2/9 : Toolchains Arduino / AVR ==="
 
     local AVR_DIR="$INSTALL_DIR/avr"
     mkdir -p "$AVR_DIR"
@@ -144,7 +144,7 @@ install_arduino_avr() {
 ###############################################################################
 
 install_microchip_toolchains() {
-    log_info "=== ÉTAPE 3/10 : Toolchains Microchip PIC / SAM / ESP32 / STM32 ==="
+    log_info "=== ÉTAPE 3/9 : Toolchains Microchip PIC / SAM / ESP32 / STM32 ==="
 
     local MCU_DIR="$INSTALL_DIR/microchip"
     mkdir -p "$MCU_DIR"
@@ -188,7 +188,7 @@ install_microchip_toolchains() {
 ###############################################################################
 
 install_eeprom_flash_programmers() {
-    log_info "=== ÉTAPE 4/10 : Programmateurs EEPROM / Flash / BIOS ==="
+    log_info "=== ÉTAPE 4/9 : Programmateurs EEPROM / Flash / BIOS ==="
 
     local FLASH_DIR="$INSTALL_DIR/flash"
     mkdir -p "$FLASH_DIR"
@@ -258,7 +258,7 @@ EOF
 ###############################################################################
 
 install_bios_uefi_tools() {
-    log_info "=== ÉTAPE 5/10 : Outils BIOS / UEFI ==="
+    log_info "=== ÉTAPE 5/9 : Outils BIOS / UEFI ==="
 
     local BIOS_DIR="$INSTALL_DIR/bios_uefi"
     mkdir -p "$BIOS_DIR"
@@ -299,7 +299,7 @@ install_bios_uefi_tools() {
 ###############################################################################
 
 install_firmware_analysis() {
-    log_info "=== ÉTAPE 6/10 : Analyse et édition de firmwares ==="
+    log_info "=== ÉTAPE 6/9 : Analyse et édition de firmwares ==="
 
     local FW_DIR="$INSTALL_DIR/firmware_analysis"
     mkdir -p "$FW_DIR"
@@ -366,7 +366,7 @@ install_firmware_analysis() {
 ###############################################################################
 
 install_ide_debug() {
-    log_info "=== ÉTAPE 7/10 : IDE et environnements de debug ==="
+    log_info "=== ÉTAPE 7/9 : IDE et environnements de debug ==="
 
     local IDE_DIR="$INSTALL_DIR/ide"
     mkdir -p "$IDE_DIR"
@@ -398,7 +398,7 @@ install_ide_debug() {
 ###############################################################################
 
 install_serial_bus_tools() {
-    log_info "=== ÉTAPE 8/10 : Utilitaires série et bus (UART/I2C/SPI/JTAG) ==="
+    log_info "=== ÉTAPE 8/9 : Utilitaires série et bus (UART/I2C/SPI/JTAG) ==="
 
     # sigrok / pulseview : analyseur logique (utile pour tracer SPI/I2C d'une EEPROM)
     log_info "Installation de sigrok / PulseView..."
@@ -415,126 +415,11 @@ install_serial_bus_tools() {
 }
 
 ###############################################################################
-# 9. Hardware Hacking : RFID/NFC, Bluetooth/BLE, analyse USB, JTAG discovery
-###############################################################################
-
-install_hw_hacking_extras() {
-    log_info "=== ÉTAPE 9/10 : RFID/NFC, Bluetooth/BLE, analyse USB, JTAG discovery ==="
-
-    local HW_DIR="$INSTALL_DIR/hw_hacking"
-    mkdir -p "$HW_DIR"
-
-    ###########################################################################
-    # 9.1 RFID / NFC / Smartcard
-    ###########################################################################
-    log_info "--- RFID / NFC / Smartcard ---"
-
-    # libnfc + outils Mifare Classic
-    install_pkgs libnfc-bin libnfc-dev mfoc mfcuk || true
-
-    # PC/SC (lecteurs smartcard ISO7816)
-    install_pkgs pcscd pcsc-tools libpcsclite-dev libccid || true
-
-    # Proxmark3 client (125kHz + 13.56MHz, nécessite le matériel Proxmark)
-    log_info "Installation du client Proxmark3 (Iceman fork)..."
-    install_pkgs libreadline-dev libbluetooth-dev libbz2-dev qtbase5-dev || true
-    clone_or_pull "https://github.com/RfidResearchGroup/proxmark3.git" "$HW_DIR/proxmark3"
-    cd "$HW_DIR/proxmark3"
-    make clean 2>/dev/null || true
-    make -j"$(nproc)" client 2>/dev/null || log_warn "Build client Proxmark3 échoué (voir doc pour le flavor matériel)"
-
-    # Règle udev Proxmark3
-    cat > "$UDEV_RULES_DIR/99-proxmark3.rules" << 'EOF'
-SUBSYSTEM=="usb", ATTR{idVendor}=="9ac4", ATTR{idProduct}=="4b8f", MODE="0666", GROUP="plugdev"
-EOF
-
-    ###########################################################################
-    # 9.2 Bluetooth / BLE
-    ###########################################################################
-    log_info "--- Bluetooth / BLE ---"
-
-    install_pkgs bluez bluez-tools blueman \
-        libbluetooth-dev libglib2.0-dev || true
-
-    # bettercap : scan/MITM multi-protocoles (BLE, Wi-Fi, réseau)
-    log_info "Installation de bettercap..."
-    if ! command -v bettercap &>/dev/null; then
-        BC_URL=$(curl -s https://api.github.com/repos/bettercap/bettercap/releases/latest \
-            | grep "browser_download_url.*linux_amd64.zip" | cut -d '"' -f4 | head -1)
-        if [[ -n "${BC_URL:-}" ]]; then
-            wget -q "$BC_URL" -O /tmp/bettercap.zip && \
-                unzip -q -o /tmp/bettercap.zip -d /tmp/bettercap_bin && \
-                install -m 0755 /tmp/bettercap_bin/bettercap /usr/local/bin/bettercap
-        else
-            log_warn "URL bettercap introuvable, installation manuelle recommandée"
-        fi
-    fi
-
-    # bleak (Python, scripting BLE cross-plateforme)
-    pip3 install --break-system-packages bleak 2>/dev/null || pip3 install bleak 2>/dev/null || true
-
-    # Adaptateur Nordic nRF52840/nRF51 dongle : nrfutil pour sniffer BLE (Wireshark)
-    log_info "Installation de nrfutil (support dongle sniffer BLE Nordic)..."
-    pip3 install --break-system-packages nrfutil 2>/dev/null || pip3 install nrfutil 2>/dev/null || \
-        log_warn "nrfutil non installé (optionnel, nécessite dongle nRF Sniffer)"
-
-    usermod -aG bluetooth "$USER_DEV" 2>/dev/null || true
-
-    ###########################################################################
-    # 9.3 Analyse USB
-    ###########################################################################
-    log_info "--- Analyse USB ---"
-
-    # usbutils : lsusb et compagnie
-    install_pkgs usbutils || true
-
-    # Wireshark + capture usbmon (sniff USB natif Linux)
-    install_pkgs wireshark tshark || true
-    modprobe usbmon 2>/dev/null || log_warn "Module usbmon non chargé (chargement au boot à vérifier : /etc/modules)"
-    grep -q "^usbmon" /etc/modules 2>/dev/null || echo "usbmon" >> /etc/modules
-    # Autorise Wireshark sans root pour la capture (groupe wireshark)
-    dpkg-reconfigure -f noninteractive wireshark-common 2>/dev/null || true
-    usermod -aG wireshark "$USER_DEV" 2>/dev/null || true
-
-    # usbrply : rejoue/génère du code depuis une capture USB (analyse protocole propriétaire)
-    log_info "Installation d'usbrply..."
-    install_pkgs libusb-1.0-0-dev swig || true
-    clone_or_pull "https://github.com/JohnDMcMaster/usbrply.git" "$HW_DIR/usbrply" 2>/dev/null || \
-        log_warn "usbrply non cloné"
-    [[ -d "$HW_DIR/usbrply" ]] && pip3 install --break-system-packages -e "$HW_DIR/usbrply" 2>/dev/null || true
-
-    # Facedancer (émulation/attaque de périphériques USB, nécessite GreatFET ou Cynthion)
-    log_info "Installation de Facedancer..."
-    pip3 install --break-system-packages facedancer 2>/dev/null || pip3 install facedancer 2>/dev/null || \
-        log_warn "Facedancer non installé (optionnel, nécessite GreatFET/Cynthion)"
-
-    ###########################################################################
-    # 9.4 JTAG discovery / boundary-scan
-    ###########################################################################
-    log_info "--- JTAG discovery ---"
-
-    # JTAGulator : outil dédié à l'identification automatique de pinout JTAG/UART
-    # inconnu sur un PCB. Le firmware se flashe sur le matériel séparément ;
-    # ici on installe uniquement le client série (terminal) pour dialoguer avec lui.
-    log_info "JTAGulator : utilise un simple terminal série (picocom/screen déjà installés)"
-    log_info "  Ex. : picocom -b 115200 /dev/ttyUSB0"
-
-    # JTAGenum (alternative logicielle pour Arduino, scan JTAG sans matériel dédié)
-    clone_or_pull "https://github.com/cyphunk/JTAGenum.git" "$HW_DIR/JTAGenum" 2>/dev/null || \
-        log_warn "JTAGenum non cloné"
-
-    # OpenOCD déjà installé à l'étape 3 (couvre la programmation/debug une fois le pinout identifié)
-    # UrJTAG déjà installé à l'étape 8 (boundary-scan générique)
-
-    log_ok "Outils RFID/NFC, Bluetooth/BLE, analyse USB et JTAG discovery installés"
-}
-
-###############################################################################
-# 10. Finalisation
+# 9. Finalisation
 ###############################################################################
 
 finalize() {
-    log_info "=== ÉTAPE 10/10 : Finalisation ==="
+    log_info "=== ÉTAPE 9/9 : Finalisation ==="
 
     ldconfig
 
@@ -552,10 +437,9 @@ STRUCTURE :
   $INSTALL_DIR/bios_uefi/          -> Outils BIOS/UEFI (UEFITool, CHIPSEC, coreboot utils)
   $INSTALL_DIR/firmware_analysis/  -> Analyse firmware (binwalk, radare2, Ghidra, EMBA)
   $INSTALL_DIR/ide/                -> Arduino IDE 2.x (AppImage)
-  $INSTALL_DIR/hw_hacking/          -> RFID/NFC (Proxmark3), USB (usbrply), JTAG (JTAGenum)
 
 UTILISATEUR : $USER_DEV
-  Ajouté aux groupes : dialout, plugdev, i2c, bluetooth, wireshark
+  Ajouté aux groupes : dialout, plugdev, i2c
 
 LOG D'INSTALLATION : $LOG_FILE
 
@@ -573,26 +457,6 @@ COMMANDES UTILES :
   uefitool bios_dump.bin                                        # Édition image UEFI
   ghidra                                                        # Rétro-ingénierie
   ifdtool -d bios_dump.bin                                      # Dump Flash Descriptor Intel
-
-  # RFID / NFC
-  nfc-list                                                       # Détection lecteur NFC
-  mfoc -O dump.mfd                                                # Attaque/dump Mifare Classic
-  pm3                                                             # Client Proxmark3 (125kHz/13.56MHz)
-
-  # Bluetooth / BLE
-  bettercap -iface bt0                                            # Scan/MITM BLE
-  bluetoothctl scan on                                            # Scan BLE natif
-  gatttool -b <MAC> -I                                             # Exploration GATT interactive
-
-  # Analyse USB
-  lsusb -v                                                        # Détail périphériques USB
-  wireshark -i usbmon1                                             # Capture trafic USB natif
-  usbrply -i capture.pcap                                          # Génère du code depuis une capture USB
-
-  # JTAG discovery
-  picocom -b 115200 /dev/ttyUSB0                                   # Terminal série (ex. JTAGulator)
-  openocd -f interface/ftdi/jtagulator.cfg -f target/<mcu>.cfg      # Debug/prog une fois le pinout trouvé
-  jtag> detect                                                     # Boundary-scan via UrJTAG
 
 ===============================================================================
 EOF
@@ -635,7 +499,6 @@ main() {
     install_firmware_analysis
     install_ide_debug
     install_serial_bus_tools
-    install_hw_hacking_extras
     finalize
 
     echo ""
