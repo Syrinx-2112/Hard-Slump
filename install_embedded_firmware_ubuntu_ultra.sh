@@ -620,44 +620,135 @@ EOF
 }
 
 ###############################################################################
-# 11. Rétro-Informatique
+# 11. Rétro-Informatique (ZX Spectrum, Commodore 64, Oric, Atari 8-bit)
 ###############################################################################
 install_retro_tools() {
-    log_section "Rétro-Informatique (Cassettes, Disquettes, ROMs)"
-
+    log_section "Rétro-Informatique (Cassettes, Disquettes, ROMs, 8-bit)"
     local RETRO_DIR="$INSTALL_DIR/retro"
 
-    # Audio tools for cassettes
+    ###########################################################################
+    # 11.0 Outils génériques (audio, disquettes, ROMs)
+    ###########################################################################
     install_pkgs_soft audacity sox libsndfile1-dev
 
-    # TZX/TAP tools
+    # --- ZX Spectrum : TZX/TAP -> WAV ---
     clone_or_pull "https://github.com/shred/tzx2wav.git" "$RETRO_DIR/tzx2wav"
     if [[ -d "$RETRO_DIR/tzx2wav" ]]; then
         cd "$RETRO_DIR/tzx2wav" && make && cp tzx2wav /usr/local/bin/ 2>/dev/null || true
     fi
 
-    # Floppy tools
+    # --- Disquettes : formats génériques ---
     install_pkgs_soft fdutils mtools libdsk4-utils cpmtools
+
     clone_or_pull "https://github.com/keirf/Disk-Utilities.git" "$RETRO_DIR/disk-utilities"
     if [[ -d "$RETRO_DIR/disk-utilities" ]]; then
         cd "$RETRO_DIR/disk-utilities" && make && make install 2>/dev/null || true
     fi
 
-    # ROM tools
-    install_pkgs_soft rom-tools 2>/dev/null || true
-    clone_or_pull "https://github.com/sanni/cartreader.git" "$RETRO_DIR/cartreader" 2>/dev/null || true
-
-    # Emulators
-    install_pkgs_soft mame retroarch mednafen vice fs-uae 2>/dev/null || true
-
-    # Greaseweazle (floppy USB reader/writer)
+    # --- Greaseweazle (lecture/écriture disquettes USB, multi-formats) ---
     clone_or_pull "https://github.com/keirf/greaseweazle.git" "$RETRO_DIR/greaseweazle"
     if [[ -d "$RETRO_DIR/greaseweazle" ]]; then
         cd "$RETRO_DIR/greaseweazle" && pip_install . 2>/dev/null || true
     fi
 
-    # Kryoflux support (java-based)
+    # --- Cartouches / ROMs ---
+    install_pkgs_soft rom-tools 2>/dev/null || true
+    clone_or_pull "https://github.com/sanni/cartreader.git" "$RETRO_DIR/cartreader" 2>/dev/null || true
+
+    # --- Émulateurs génériques ---
+    install_pkgs_soft mame retroarch mednafen vice fs-uae 2>/dev/null || true
+
     log_info "KryoFlux : nécessite Java, installation manuelle depuis kryoflux.com"
+
+    ###########################################################################
+    # 11.1 COMMODORE 64 / 128 / VIC-20 / PET
+    ###########################################################################
+    log_info "--- Commodore 64 / 128 / VIC-20 ---"
+
+    # VICE : x64sc (cycle-exact), x128, xvic, xpet
+    # Inclus : c1541 (manipulation D64/D71/D81/TAP), petcat (BASIC),
+    #          cartconv (cartouches CRT), cbm2ntsc/c1541-III
+    install_pkgs_soft vice
+
+    # Toolchain 6502 : assembleurs + compilateur C
+    # (64tass, ACME, DASM et XA sont aussi valides pour Atari 8-bit et Oric)
+    install_pkgs_soft 64tass acme dasm xa65 cc65
+
+    # Exomizer : cruncher de données (standard de la scène demo C64)
+    install_pkgs_soft exomizer
+
+    # OpenCBM : piloter un vrai lecteur 1541/1571 depuis le PC
+    # (câble XM1541 sur port parallèle, XA1541 sur USB)
+    if ! apt-get install -y opencbm 2>/dev/null; then
+        log_info "opencbm : compilation depuis les sources..."
+        clone_or_pull "https://github.com/OpenCBM/OpenCBM.git" "$RETRO_DIR/opencbm"
+        if [[ -d "$RETRO_DIR/opencbm" ]]; then
+            cd "$RETRO_DIR/opencbm"
+            make -f linux/Makefile 2>/dev/null && \
+            make -f linux/Makefile install 2>/dev/null || true
+        fi
+    fi
+
+    log_info "VICE : si ROMs absentes (kernal/basic/chargen), les placer dans /usr/lib/vice ou ~/.vice"
+    log_info "C64 cassette : c1541/petcat génèrent les TAP ; pour TAP->WAV voir les outils communautaires 'tap2wav' (GitHub/zimmers.net)"
+
+    ###########################################################################
+    # 11.2 ORIC-1 / ORIC ATMOS / TELESTRAT
+    ###########################################################################
+    log_info "--- Oric-1 / Atmos ---"
+
+    install_pkgs_soft libsdl2-dev libgtk-3-dev 2>/dev/null || true
+
+    # Oricutron : l'émulateur de référence (SDL2)
+    clone_or_pull "https://github.com/pete-gordon/oricutron.git" "$RETRO_DIR/oricutron"
+    if [[ -d "$RETRO_DIR/oricutron" ]]; then
+        cd "$RETRO_DIR/oricutron" && make 2>/dev/null && \
+        cp oricutron /usr/local/bin/ 2>/dev/null || true
+    fi
+
+    # OSDK : toolchain de développement Oric (XA, libs C/asm, utilitaires TAP/DSK)
+    clone_or_pull "https://github.com/oric-software/OSDK.git" "$RETRO_DIR/oric-osdk" 2>/dev/null || \
+        log_info "OSDK : également disponible via SVN sur defence-force.org"
+
+    log_info "Oricutron : ROMs (basic.rom, microdis.rom...) à placer dans le répertoire roms/"
+    log_info "Oric cassette : l'OSDK fournit les convertisseurs TAP<->WAV pour chargement sur matériel réel"
+
+    ###########################################################################
+    # 11.3 ATARI 8-BIT (800XL / 65XE / 130XE)
+    ###########################################################################
+    log_info "--- Atari 8-bit (800XL / 65XE) ---"
+
+    # atari800 : émulateur de référence (supporte ATR, XFD, CAS, CAR, BIN)
+    install_pkgs_soft atari800
+
+    # Bonus : famille Atari ST/TT/Falcon
+    install_pkgs_soft hatari 2>/dev/null || true
+
+    # XASM : assembleur historique de la scène Atari 8-bit (syntaxe .ASM)
+    clone_or_pull "https://github.com/pfusik/xasm.git" "$RETRO_DIR/xasm"
+    if [[ -d "$RETRO_DIR/xasm" ]]; then
+        cd "$RETRO_DIR/xasm" && make 2>/dev/null && \
+        cp xasm /usr/local/bin/ 2>/dev/null || true
+    fi
+
+    # Mad Pascal (optionnel : Pascal -> 6502, nécessite FreePascal)
+    clone_or_pull "https://github.com/tebe6502/Mad-Pascal.git" "$RETRO_DIR/mad-pascal" 2>/dev/null || true
+
+    log_info "atari800 : ROMs OS/BASIC à récupérer sur atari800.sourceforge.net (chemin demandé au 1er lancement)"
+    log_info "Atari cassette : le format CAS est lu nativement par atari800 (menu 'Run Atari Program')"
+    log_info "Atari disquettes réelles (1050/810 via SIO2PC) : voir atarisio.org"
+
+    ###########################################################################
+    # 11.4 Règles udev rétro
+    ###########################################################################
+    cat > "$UDEV_RULES_DIR/99-retro.rules" << 'EOF'
+# Greaseweazle (STM32 USB CDC)
+SUBSYSTEM=="tty", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="5740", MODE="0666", GROUP="dialout", SYMLINK+="greaseweazle"
+EOF
+
+    # Accès port parallèle (câble XM1541 pour OpenCBM)
+    usermod -aG lp "$USER_DEV" 2>/dev/null || true
+    grep -q "^ppdev" /etc/modules 2>/dev/null || echo "ppdev" >> /etc/modules
 
     log_ok "Outils Rétro installés"
 }
