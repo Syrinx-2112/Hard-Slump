@@ -1,6 +1,6 @@
 #!/bin/bash
 ###############################################################################
-# POST-INSTALLATION ULTRA2 - HARDWARE HACKING ULTIME
+# POST-INSTALLATION ULTRA3 - HARDWARE HACKING ULTIME
 # Cible   : Ubuntu 22.04 LTS / 24.04 LTS (x86_64)
 # Fusion  : install_embedded_firmware_ubuntu.sh
 #           + install_embedded_firmware_ubuntu_ultra.sh
@@ -14,7 +14,12 @@
 #   - Sécurité réseau offensive : Nmap, Metasploit, Burp
 #   - Outils PCB avancés & Fabrication
 #   - Oscilloscopes & Analyseurs logiques logiciels
-# Usage   : sudo chmod +x install_ultra2.sh && sudo ./install_ultra2.sh
+# Nouvelles sections ULTRA3 :
+#   - Extensions ROM/Firmware/BIOS : patch IPS/BPS/xdelta, SRecord, rebuild d'images
+#   - SIGINT & Radio avancé : ADS-B, AIS, POCSAG, ACARS, satellites, ham numérique
+#   - Rétro-Informatique avancée : disquettes physiques, Amiga/Apple II/ZX/MSX,
+#     cassettes, cryptologie historique, demoscene, rétro-BBS
+# Usage   : sudo chmod +x install_ultra3.sh && sudo ./install_ultra3.sh
 ###############################################################################
 set -euo pipefail
 IFS=$'\n\t'
@@ -35,7 +40,7 @@ exec > >(tee -a "$LOG_FILE") 2>&1
 INSTALL_DIR="/opt/ultra2"
 UDEV_RULES_DIR="/etc/udev/rules.d"
 USER_DEV="${SUDO_USER:-$USER}"
-TOTAL_STEPS=22
+TOTAL_STEPS=25
 CURRENT_STEP=0
 
 ###############################################################################
@@ -1436,10 +1441,252 @@ install_pcb_scopes() {
 }
 
 ###############################################################################
-# 22. Finalisation ULTRA2
+# 22. *** NOUVEAU ULTRA3 *** Extensions ROM / Firmware / BIOS
+###############################################################################
+install_rom_firmware_extra() {
+    log_section "Extensions ROM / Firmware / BIOS (patch, conversion, rebuild)"
+
+    local FLASH_DIR="$INSTALL_DIR/flash"
+    local FW_DIR="$INSTALL_DIR/firmware_analysis"
+    local BIOS_DIR="$INSTALL_DIR/bios_uefi"
+
+    ###########################################################################
+    # 22.1 Conversion de formats binaires (HEX, S-Record, BIN, ELF)
+    ###########################################################################
+    log_info "--- Conversion de formats binaires ---"
+
+    # SRecord : suite complète de conversion Motorola S-Record / Intel HEX / binaire
+    install_pkgs_soft srecord
+
+    # objcopy (binutils) déjà présent via build-essential pour ELF<->BIN<->HEX
+
+    ###########################################################################
+    # 22.2 Patch de ROMs (traductions, homebrew, hacks)
+    ###########################################################################
+    log_info "--- Patch de ROMs (IPS/BPS/UPS/xdelta) ---"
+
+    install_pkgs_soft xdelta3 bsdiff
+
+    # Flips (Floating IPS) : patcheur IPS/BPS multiplateforme
+    clone_or_pull "https://github.com/Alcaro/Flips.git" "$FLASH_DIR/flips" 2>/dev/null || true
+    if [[ -d "$FLASH_DIR/flips" ]]; then
+        cd "$FLASH_DIR/flips" && make -j"$(nproc)" 2>/dev/null && \
+        cp flips /usr/local/bin/ 2>/dev/null || true
+    fi
+
+    ###########################################################################
+    # 22.3 Programmateurs additionnels / EEPROM parallèles vintage
+    ###########################################################################
+    log_info "--- Programmateurs additionnels ---"
+
+    # TommyPROM : programmateur EEPROM parallèles (27xxx/28xxx) à base d'Arduino
+    clone_or_pull "https://github.com/TomNisbet/TommyPROM.git" "$FLASH_DIR/tommyprom" 2>/dev/null || true
+
+    # AVRDUDE sait déjà piloter beaucoup d'ISP ; ajout picprog pour PIC via port série
+    clone_or_pull "https://github.com/csolarski/picprog.git" "$FLASH_DIR/picprog" 2>/dev/null || true
+
+    ###########################################################################
+    # 22.4 Rebuild / repackaging d'images firmware
+    ###########################################################################
+    log_info "--- Rebuild d'images firmware ---"
+
+    # fwtool (OpenWrt) : lecture/écriture des en-têtes de firmware
+    clone_or_pull "https://github.com/openwrt/fwtool.git" "$FW_DIR/fwtool" 2>/dev/null || true
+    if [[ -d "$FW_DIR/fwtool" ]]; then
+        cd "$FW_DIR/fwtool" && make 2>/dev/null && \
+        cp fwtool /usr/local/bin/ 2>/dev/null || true
+    fi
+
+    # mkimage (U-Boot) déjà installé via uboot-tools (section firmware analysis)
+    log_info "mkimage/dumpimage déjà disponibles via uboot-tools"
+
+    # firmware-mod-kit déjà cloné (section firmware analysis) : build_fw.sh pour repackager
+
+    ###########################################################################
+    # 22.5 UEFI avancé
+    ###########################################################################
+    log_info "--- UEFI avancé ---"
+
+    # UEFIExtract est fourni avec UEFITool (déjà installé)
+    # fwupd / fwupdmgr : mises à jour firmware standard Linux
+    install_pkgs_soft fwupd
+
+    log_ok "Extensions ROM/Firmware/BIOS installées"
+}
+
+###############################################################################
+# 23. *** NOUVEAU ULTRA3 *** SIGINT & Radio Avancé
+###############################################################################
+install_sigint_extra() {
+    log_section "SIGINT & Radio Avancé (ADS-B, AIS, Pagers, Satellites, Ham digital)"
+
+    local SDR_DIR="$INSTALL_DIR/sdr"
+    mkdir -p "$SDR_DIR"
+
+    ###########################################################################
+    # 23.1 Trafic aérien / maritime (réception passive, domaine public)
+    ###########################################################################
+    log_info "--- ADS-B (aviation) / AIS (maritime) ---"
+
+    # readsb / dump1090 : décodage ADS-B 1090MHz
+    clone_or_pull "https://github.com/wiedehopf/readsb.git" "$SDR_DIR/readsb" 2>/dev/null || true
+    if [[ -d "$SDR_DIR/readsb" ]]; then
+        cd "$SDR_DIR/readsb" && make -j"$(nproc)" RTLSDR=yes 2>/dev/null || true
+    fi
+
+    # AIS-catcher : décodage AIS (identification navires, 161/162MHz)
+    clone_or_pull "https://github.com/jvde-github/AIS-catcher.git" "$SDR_DIR/ais-catcher" 2>/dev/null || true
+    if [[ -d "$SDR_DIR/ais-catcher" ]]; then
+        cd "$SDR_DIR/ais-catcher" && mkdir -p build && cd build && \
+        cmake .. 2>/dev/null && make -j"$(nproc)" 2>/dev/null || true
+    fi
+
+    ###########################################################################
+    # 23.2 Décodage signaux numériques large bande
+    ###########################################################################
+    log_info "--- Pagers (POCSAG/FLEX), ACARS, DAB ---"
+
+    # multimon-ng : POCSAG, FLEX, AFSK, DTMF...
+    clone_or_pull "https://github.com/EliasOenal/multimon-ng.git" "$SDR_DIR/multimon-ng" 2>/dev/null || true
+    if [[ -d "$SDR_DIR/multimon-ng" ]]; then
+        mkdir -p "$SDR_DIR/multimon-ng/build" && cd "$SDR_DIR/multimon-ng/build" && \
+        cmake .. 2>/dev/null && make -j"$(nproc)" 2>/dev/null && make install 2>/dev/null || true
+    fi
+
+    # acarsdec : messages ACARS (liaison de données avionique)
+    clone_or_pull "https://github.com/TLeconte/acarsdec.git" "$SDR_DIR/acarsdec" 2>/dev/null || true
+
+    # welle.io : réception DAB/DAB+
+    install_pkgs_soft welle-io 2>/dev/null || true
+
+    # rtl_433 : capteurs ISM (météo, domotique, télémesure 433/868/915MHz)
+    install_pkgs_soft rtl-433 2>/dev/null || {
+        clone_or_pull "https://github.com/merbanan/rtl_433.git" "$SDR_DIR/rtl_433"
+        if [[ -d "$SDR_DIR/rtl_433" ]]; then
+            mkdir -p "$SDR_DIR/rtl_433/build" && cd "$SDR_DIR/rtl_433/build" && \
+            cmake .. 2>/dev/null && make -j"$(nproc)" 2>/dev/null && make install 2>/dev/null || true
+        fi
+    }
+
+    ###########################################################################
+    # 23.3 Suivi satellite / réception spatiale
+    ###########################################################################
+    log_info "--- Satellites / Espace ---"
+
+    # gpredict : suivi orbital, prédiction de passages
+    install_pkgs_soft gpredict
+
+    # gr-satellites : décodage télémesure de nombreux satellites/CubeSats
+    clone_or_pull "https://github.com/daniestevez/gr-satellites.git" "$SDR_DIR/gr-satellites" 2>/dev/null || true
+
+    # predict : calcul de trajectoires (alternative CLI à gpredict)
+    install_pkgs_soft predict 2>/dev/null || true
+
+    # NOAA APT (images satellites météo) : wxtoimg n'est plus maintenu,
+    # utiliser gr-satellites ou noaa-apt (Rust, actif)
+    log_info "Images météo NOAA APT : voir github.com/martinber/noaa-apt"
+
+    ###########################################################################
+    # 23.4 Modes numériques radioamateur
+    ###########################################################################
+    log_info "--- Radioamateur numérique ---"
+
+    install_pkgs_soft fldigi flrig 2>/dev/null || true
+    install_pkgs_soft wsjt-x 2>/dev/null || true
+    install_pkgs_soft js8call 2>/dev/null || true
+
+    # direwolf : TNC logiciel pour APRS et packet radio
+    clone_or_pull "https://github.com/wb2osz/direwolf.git" "$SDR_DIR/direwolf" 2>/dev/null || true
+    if [[ -d "$SDR_DIR/direwolf" ]]; then
+        mkdir -p "$SDR_DIR/direwolf/build" && cd "$SDR_DIR/direwolf/build" && \
+        cmake .. 2>/dev/null && make -j"$(nproc)" 2>/dev/null && make install 2>/dev/null || true
+    fi
+
+    log_ok "Outils SIGINT/Radio avancés installés"
+}
+
+###############################################################################
+# 24. *** NOUVEAU ULTRA3 *** Rétro-Informatique Avancée
+###############################################################################
+install_retro_formats_extra() {
+    log_section "Rétro-Informatique Avancée (formats, disquettes physiques, cryptologie)"
+
+    local RETRO_DIR="$INSTALL_DIR/retro"
+
+    ###########################################################################
+    # 24.1 Interfaces disquettes physiques (flux magnétique brut)
+    ###########################################################################
+    log_info "--- Interfaces disquettes physiques ---"
+
+    # HxC Floppy Emulator tools (conversion d'images pour émulateur de disquette)
+    clone_or_pull "https://github.com/jfdelnero/HxCFloppyEmulator.git" "$RETRO_DIR/hxcfe" 2>/dev/null || true
+
+    # Applesauce / KryoFlux : matériel propriétaire, clients GUI Windows/Mac
+    log_info "Applesauce (Apple II) et KryoFlux : clients officiels Windows/Mac requis"
+
+    # Greaseweazle déjà installé (section 11) : gw read/write pour flux bruts (.scp/.hfe)
+
+    ###########################################################################
+    # 24.2 Conversion d'images disque / bande par plateforme
+    ###########################################################################
+    log_info "--- Conversion d'images par plateforme ---"
+
+    # Amiga : amitools (xdftool pour ADF, unadf, transfert de disque physique)
+    pip_install amitools 2>/dev/null || true
+
+    # Apple II : AppleCommander (Java) pour DSK/PO/2MG/WOZ
+    log_info "Apple II : AppleCommander (jar Java) - github.com/AppleCommander/AppleCommander"
+    install_pkgs_soft default-jre 2>/dev/null || true
+
+    # ZX Spectrum : tzxtools (analyse/édition TZX/TAP en Python)
+    pip_install tzxtools 2>/dev/null || true
+
+    # Commodore : d64 déjà géré par c1541 (VICE, section 11)
+
+    # MSX : openMSX (émulateur cycle-exact) + gestion DSK native
+    install_pkgs_soft openmsx 2>/dev/null || true
+
+    ###########################################################################
+    # 24.3 Cassettes audio (encodage/décodage générique)
+    ###########################################################################
+    log_info "--- Cassettes audio ---"
+
+    # wav-prg : conversion TAP<->WAV pour Commodore 64
+    clone_or_pull "https://github.com/francescovannini/wav-prg.git" "$RETRO_DIR/wav-prg" 2>/dev/null || true
+
+    ###########################################################################
+    # 24.4 Cryptologie historique (simulateurs, hors ligne, pédagogique)
+    ###########################################################################
+    log_info "--- Cryptologie historique ---"
+
+    # py-enigma : simulateur logiciel de la machine Enigma
+    pip_install py-enigma 2>/dev/null || true
+
+    ###########################################################################
+    # 24.5 Demoscene & rétro-BBS
+    ###########################################################################
+    log_info "--- Demoscene & rétro-BBS ---"
+
+    # Trackers audio (MOD/XM/IT/S3M)
+    install_pkgs_soft milkytracker schismtracker 2>/dev/null || true
+
+    # ansilove : rendu d'art ANSI/ASCII (fichiers .ans de la scène BBS)
+    install_pkgs_soft ansilove 2>/dev/null || true
+
+    # lrzsz : transferts X/Y/Zmodem pour BBS et terminaux série
+    install_pkgs_soft lrzsz
+
+    # cool-retro-term : émulateur de terminal look CRT phosphore (confort d'ambiance)
+    install_pkgs_soft cool-retro-term 2>/dev/null || true
+
+    log_ok "Outils Rétro-Informatique avancés installés"
+}
+
+###############################################################################
+# 25. Finalisation ULTRA3
 ###############################################################################
 ultimate_finalize() {
-    log_section "Finalisation ULTRA2"
+    log_section "Finalisation ULTRA3"
 
     ldconfig
 
@@ -1447,10 +1694,10 @@ ultimate_finalize() {
     usermod -aG dialout,plugdev,i2c,bluetooth,wireshark "$USER_DEV" 2>/dev/null || true
 
     # README final
-    cat > "$INSTALL_DIR/README_ULTRA2.txt" << 'EOFREADME'
+    cat > "$INSTALL_DIR/README_ULTRA3.txt" << 'EOFREADME'
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║           CONSOLE NETRUNNER ULTRA2 - ENVIRONNEMENT HARDWARE HACKING         ║
-║                    FUSION COMPLÈTE - 22 SECTIONS                             ║
+║           CONSOLE NETRUNNER ULTRA3 - ENVIRONNEMENT HARDWARE HACKING         ║
+║                    FUSION COMPLÈTE - 25 SECTIONS                             ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
 RÉPERTOIRE : /opt/ultra2
@@ -1479,6 +1726,13 @@ STRUCTURE DES RÉPERTOIRES :
 /opt/ultra2/network_security/   → Nmap, Metasploit, Aircrack ★ NOUVEAU
 /opt/ultra2/pcb/                → PCB Design, CNC, 3D Printing ★ NOUVEAU
 /opt/ultra2/scopes/             → Oscilloscopes, Analyseurs logiques ★ NOUVEAU
+
+EXTENSIONS ULTRA3 (dans les répertoires existants) :
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+/opt/ultra2/flash/              → + patch ROM (Flips, xdelta3, bsdiff), TommyPROM ★★
+/opt/ultra2/firmware_analysis/  → + fwtool, rebuild d'images firmware ★★
+/opt/ultra2/sdr/                → + ADS-B, AIS, POCSAG, satellites, ham digital ★★
+/opt/ultra2/retro/               → + HxCFE, amitools, tzxtools, wav-prg, demoscene ★★
 
 GROUPES UTILISATEUR : dialout, plugdev, i2c, bluetooth, wireshark
 
@@ -1584,6 +1838,28 @@ gerbv gerber_files/                         # Viewer Gerber
 openscad model.scad                         # 3D modeling
 cura                                        # Slicer 3D
 
+── PATCH & CONVERSION ROM ★★ ULTRA3 ──
+srec_cat input.hex -Intel -o output.bin -Binary   # Conversion HEX/S-Record/BIN
+flips --create original.bin patched.bin patch.ips # Créer un patch IPS
+xdelta3 -e -s original.bin patched.bin patch.xd3  # Créer un patch xdelta3
+xdelta3 -d -s original.bin patch.xd3 patched.bin  # Appliquer un patch xdelta3
+
+── SIGINT / RADIO AVANCÉ ★★ ULTRA3 ──
+readsb --device-type rtlsdr --net                 # Décodage ADS-B
+ais-catcher -d 0 -o 2                             # Décodage AIS maritime
+multimon-ng -a POCSAG512 -f alpha /dev/stdin       # Décodage pagers
+acarsdec -o 2 131.550                             # Décodage ACARS
+gpredict                                          # Suivi satellites
+fldigi                                            # Modes numériques ham
+direwolf -c direwolf.conf                         # TNC APRS/Packet
+
+── RÉTRO AVANCÉ ★★ ULTRA3 ──
+xdftool disk.adf list                             # Amiga ADF
+python3 -m tzxtools.tzxcat tape.tzx               # ZX Spectrum TZX/TAP
+java -jar AppleCommander.jar -l disk.dsk           # Apple II DSK
+milkytracker                                      # Composition MOD/XM
+ansilove art.ans -o art.png                       # Rendu art ANSI
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 RÈGLES UDEV INSTALLÉES :
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1612,9 +1888,9 @@ EOFREADME
 
     chown -R "$USER_DEV:$USER_DEV" "$INSTALL_DIR"
 
-    log_ok "Installation ULTRA2 terminée !"
+    log_ok "Installation ULTRA3 terminée !"
     log_info "Redémarrage recommandé pour appliquer toutes les configurations."
-    log_info "Guide complet : cat $INSTALL_DIR/README_ULTRA2.txt"
+    log_info "Guide complet : cat $INSTALL_DIR/README_ULTRA3.txt"
 }
 
 ###############################################################################
@@ -1632,7 +1908,7 @@ main() {
     echo -e "${CYAN}║     ╚██████╔╝██║     ██║   ██║  ██║██║  ██║███████╗██████╔╝                 ║${NC}"
     echo -e "${CYAN}║      ╚═════╝ ╚═╝     ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝╚═════╝                  ║${NC}"
     echo -e "${CYAN}║                                                                              ║${NC}"
-    echo -e "${CYAN}║     CONSOLE NETRUNNER ULTRA2 - POST-INSTALLATION HARDWARE HACKING           ║${NC}"
+    echo -e "${CYAN}║     CONSOLE NETRUNNER ULTRA3 - POST-INSTALLATION HARDWARE HACKING           ║${NC}"
     echo -e "${CYAN}║     MCU | FPGA | Firmware | SDR | IoT | Auto | Side-Channel | Storage       ║${NC}"
     echo -e "${CYAN}║                                                                              ║${NC}"
     echo -e "${CYAN}╚══════════════════════════════════════════════════════════════════════════════╝${NC}"
@@ -1642,13 +1918,13 @@ main() {
     check_ubuntu
     check_resources
 
-    log_info "Début de l'installation ULTRA2 à $(date)"
+    log_info "Début de l'installation ULTRA3 à $(date)"
     log_info "Utilisateur cible : $USER_DEV"
     log_info "Répertoire d'installation : $INSTALL_DIR"
     log_info "Nombre d'étapes : $TOTAL_STEPS"
     echo ""
 
-    read -p "Appuyez sur Entrée pour lancer l'installation ULTRA2 (Ctrl+C pour annuler)..."
+    read -p "Appuyez sur Entrée pour lancer l'installation ULTRA3 (Ctrl+C pour annuler)..."
     echo ""
 
     # Sections originales (script 1)
@@ -1668,7 +1944,7 @@ main() {
     install_eda_tools                       # 12
     install_media_p2p_tools                 # 13
 
-    # Nouvelles sections ULTRA2
+    # Nouvelles sections ULTRA2 (fusion précédente)
     install_storage_recovery                # 14 ★
     install_sdr_tools                       # 15 ★
     install_iot_protocols                   # 16 ★
@@ -1678,16 +1954,21 @@ main() {
     install_network_security                # 20 ★
     install_pcb_scopes                      # 21 ★
 
+    # Nouvelles sections ULTRA3
+    install_rom_firmware_extra              # 22 ★★
+    install_sigint_extra                    # 23 ★★
+    install_retro_formats_extra             # 24 ★★
+
     # Finalisation
-    ultimate_finalize                       # 22
+    ultimate_finalize                       # 25
 
     echo ""
     echo -e "${GREEN}╔══════════════════════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║              INSTALLATION ULTRA2 TERMINÉE AVEC SUCCÈS !                      ║${NC}"
+    echo -e "${GREEN}║              INSTALLATION ULTRA3 TERMINÉE AVEC SUCCÈS !                      ║${NC}"
     echo -e "${GREEN}╚══════════════════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
     echo -e "  ${YELLOW}Redémarrez votre système :${NC} sudo reboot"
-    echo -e "  ${YELLOW}Guide complet :${NC} cat $INSTALL_DIR/README_ULTRA2.txt"
+    echo -e "  ${YELLOW}Guide complet :${NC} cat $INSTALL_DIR/README_ULTRA3.txt"
     echo -e "  ${YELLOW}Log d'installation :${NC} cat $LOG_FILE"
     echo ""
     echo -e "  ${MAGENTA}« Wake up, Neo... The Matrix has you. »${NC}"
